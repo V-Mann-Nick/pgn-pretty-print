@@ -10,6 +10,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
+from reportlab.platypus.flowables import KeepTogether
 
 
 # ------------- CONSTANTS -------------
@@ -29,7 +30,6 @@ LINE_SPACING = None
 SPACE_BEFORE = None
 SPACE_AFTER = None
 LINE_SPACING = None
-ALLOW_SPLITTING = None
 # not yet implemented
 PAGE_FORMAT = A4
 PAGE_LAYOUT = None
@@ -100,7 +100,7 @@ def create_document(game):
                           topMargin=PAGE_MARGIN * cm,
                           bottomMargin=PAGE_MARGIN * cm,
                           showBoundary=0,
-                          allowSplitting=1 if ALLOW_SPLITTING else 0)
+                          allowSplitting=1)
 
     # define styles for paragraphs
     styles.add(ParagraphStyle(
@@ -130,7 +130,7 @@ def create_document(game):
 
     # Set board dimensions relative to the two column layout
     global BOARD_LENGTH, TILE_LENGTH
-    BOARD_LENGTH = frame_width / cm  # in cm
+    BOARD_LENGTH = 0.8 * frame_width / cm  # in cm
     TILE_LENGTH = BOARD_LENGTH / 8  # in cm
 
     # elements will contain flowables for the build function
@@ -141,7 +141,7 @@ def create_document(game):
         game.headers['White'],
         game.headers['Black'])
     for key in game.headers.keys():
-        if key != 'White' and key != 'Black':
+        if key != 'White' and key != 'Black' and game.headers[key] != '?':
             paragraph += '<br/>{}: {}'.format(key, game.headers[key])
     elements.append(Paragraph(paragraph, styles['Header']))
     # Generate paragraphs with move text and board diagramms
@@ -150,7 +150,7 @@ def create_document(game):
         paragraph += print_move_and_variations(move, i).replace('<*>', '').strip() + ' '
         if move.comment and '<*>' in move.comment or any([i == halfmove for halfmove in HALFMOVES_TO_BE_PRINTED]):
             elements.append(Paragraph(paragraph, styles['Move_Text']))
-            elements.append(board_from_FEN(move.board().fen()))
+            elements.append(KeepTogether(board_from_FEN(move.board().fen())))
             paragraph = str()
     elements.append(Paragraph(paragraph, styles['Move_Text']))
 
@@ -180,7 +180,6 @@ def run(args):
     SPACE_AFTER = args.spaceAfter
     LINE_SPACING = args.lineSpacing
     PAGE_MARGIN = args.pageMargin
-    ALLOW_SPLITTING = args.allowSplitting
 
     create_document(game)
 
@@ -222,10 +221,6 @@ def main():
                         type=float,
                         help='Set margin (left, right, bottom, up) of page',
                         default=1.27)
-    parser.add_argument('-s',
-                        '--allowSplitting',
-                        help='Use to have content split',
-                        action='store_true')
     parser.set_defaults(func=run)
     args = parser.parse_args()
     args.func(args)
