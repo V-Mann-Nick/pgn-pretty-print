@@ -5,11 +5,8 @@ Requirements:
 - reportlab
 - python-chess
 
-usage: pgn_to_pdf.py [-h] [-p PRINTBOARD] [-fs FONTSIZE] [-fn FONTNAME]
-                     [-sb SPACEBEFORE] [-sa SPACEAFTER] [-ls LINESPACING]
-                     [-pm PAGEMARGIN] [-s]
-                     pgn_path
 
+```
 Pretty print for pgn
 
 positional arguments:
@@ -33,3 +30,4 @@ optional arguments:
   -pm PAGEMARGIN, --pageMargin PAGEMARGIN
                         Set margin (left, right, bottom, up) of page
   -s, --allowSplitting  Use to have content split
+```
