@@ -1,25 +1,39 @@
 #!/usr/bin/python
 
+
+import argparse
+import chess
+import chess.pgn
 from reportlab.platypus import Table, Image, Frame, BaseDocTemplate, Paragraph, PageTemplate
 from reportlab.lib.units import cm
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-# import re
-import chess
-import chess.pgn
-import argparse
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
 
 
 # ------------- CONSTANTS -------------
 BOARD_LENGTH = 15  # in cm
 TILE_LENGTH = BOARD_LENGTH / 8  # in cm
 TILE_PADDING = 0.1  # relative to TILE_LENGTH
+PIECE_IMAGES_PATH = 'piece_images/merida/72/'
+
+# ------------- OPTIONS -------------
 DARK_TILE_COLOR = colors.brown
 LIGHT_TILE_COLOR = colors.white
-PIECE_IMAGES_PATH = 'piece_images/merida/72/'
 PAGE_MARGIN = 1.27  # in cm
 HALFMOVES_TO_BE_PRINTED = list()
+FONT_NAME = None
+FONT_SIZE = None
+LINE_SPACING = None
+SPACE_BEFORE = None
+SPACE_AFTER = None
+LINE_SPACING = None
+ALLOW_SPLITTING = None
+# not yet implemented
+PAGE_FORMAT = A4
+PAGE_LAYOUT = None
+PAGE_NUMBERING = None
 
 
 def board_from_FEN(fen):
@@ -57,60 +71,88 @@ def print_move_and_variations(move, halfmove):
     # examples: '1. e4', 'c5'
     move_number = int((halfmove + 2) / 2)
     white_to_move = halfmove % 2 is 0
-    text = '<b>{}{}</b><i>{}</i>'.format('{}. '.format(move_number) if white_to_move else '',
-                                         move.san(),
-                                         ' {}'.format(move.comment) if move.comment else '')
+    text = '<strong>{}{}</strong>{}'.format('{}. '.format(move_number) if white_to_move else '',
+                                            move.san(),
+                                            ' {}'.format(move.comment) if move.comment else '')
     # If game has variations at this point they will be printed including comments.
     # examples: 'c5 (1... e5 2. Nf3)', '2. Nf3 (2. d4 a more direct approach)'
     if len(move.parent.variations) > 1:
         for i in range(1, len(move.parent.variations)):
-            text += ' '
+            text += ' (<i>'
             # This will only add the first move of the variation
-            text += '({}{}<i>{}</i>'.format('{}. '.format(move_number) if white_to_move else '{}... '.format(move_number),
-                                            move.parent.variations[i].san(),
-                                            ' {}'.format(move.parent.variations[i].comment) if move.parent.variations[i].comment else '')
+            text += '<strong>{}{}</strong>{}'.format('{}. '.format(move_number) if white_to_move else '{}... '.format(move_number),
+                                           move.parent.variations[i].san(),
+                                           ' {}'.format(move.parent.variations[i].comment) if move.parent.variations[i].comment else '')
             # For the following moves recursivly explore the variation tree
             # This will also include subvariations
             for j, var_move in enumerate(move.parent.variations[i].mainline()):
                 text += ' {}'.format(print_move_and_variations(var_move, halfmove + 1 + j))
-            text += ')'
+            text += '</i>)'
     return text
 
 
 def create_document(game):
     styles = getSampleStyleSheet()
     doc = BaseDocTemplate('{} - {}.pdf'.format(game.headers['White'], game.headers['Black']),
-                          pagesize=A4,
+                          pagesize=PAGE_FORMAT,
                           leftMargin=PAGE_MARGIN * cm,
                           rightMargin=PAGE_MARGIN * cm,
                           topMargin=PAGE_MARGIN * cm,
                           bottomMargin=PAGE_MARGIN * cm,
                           showBoundary=0,
-                          allowSplitting=0)
+                          allowSplitting=1 if ALLOW_SPLITTING else 0)
+
+    # define styles for paragraphs
+    styles.add(ParagraphStyle(
+        'Header',
+        fontSize=FONT_SIZE,
+        fontName=FONT_NAME,
+        spaceBefore=SPACE_BEFORE,
+        spaceAfter=SPACE_AFTER,
+        leading=LINE_SPACING,
+        alignment=TA_CENTER
+    ))
+    styles.add(ParagraphStyle(
+        'Move_Text',
+        fontSize=FONT_SIZE,
+        fontName=FONT_NAME,
+        spaceBefore=SPACE_BEFORE,
+        spaceAfter=SPACE_AFTER,
+        leading=LINE_SPACING
+    ))
 
     # Two Columns
-    frame_gap = 0.15  # in cm
+    frame_gap = 1  # in cm
     frame_width = doc.width / 2 - frame_gap / 2 * cm
     frame1 = Frame(doc.leftMargin, doc.bottomMargin, frame_width, doc.height, id='col1')
-    frame2 = Frame(doc.leftMargin + frame_width + frame_gap, doc.bottomMargin, frame_width, doc.height, id='col21')
+    frame2 = Frame(doc.leftMargin + frame_width + frame_gap * cm, doc.bottomMargin, frame_width, doc.height, id='col2')
     doc.addPageTemplates([PageTemplate(id='twoCol', frames=[frame1, frame2])])
 
     # Set board dimensions relative to the two column layout
     global BOARD_LENGTH, TILE_LENGTH
-    BOARD_LENGTH = frame1.width / cm  # in cm
+    BOARD_LENGTH = frame_width / cm  # in cm
     TILE_LENGTH = BOARD_LENGTH / 8  # in cm
 
     # elements will contain flowables for the build function
     elements = []
-    # Generate paragraphs and board diagramms
+    # Paragraph for Heading and meta information
+    paragraph = '<font size={}><strong>{} - {}</strong></font><br/>'.format(
+        FONT_SIZE + 2,
+        game.headers['White'],
+        game.headers['Black'])
+    for key in game.headers.keys():
+        if key != 'White' and key != 'Black':
+            paragraph += '<br/>{}: {}'.format(key, game.headers[key])
+    elements.append(Paragraph(paragraph, styles['Header']))
+    # Generate paragraphs with move text and board diagramms
     paragraph = str()
     for i, move in enumerate(game.mainline()):
-        paragraph += print_move_and_variations(move, i) + ' '
+        paragraph += print_move_and_variations(move, i).replace('<*>', '').strip() + ' '
         if move.comment and '<*>' in move.comment or any([i == halfmove for halfmove in HALFMOVES_TO_BE_PRINTED]):
-            elements.append(Paragraph(paragraph, styles['Normal']))
+            elements.append(Paragraph(paragraph, styles['Move_Text']))
             elements.append(board_from_FEN(move.board().fen()))
             paragraph = str()
-    elements.append(Paragraph(paragraph, styles['Normal']))
+    elements.append(Paragraph(paragraph, styles['Move_Text']))
 
     doc.build(elements)
 
@@ -120,6 +162,7 @@ def run(args):
     # Open pgn with parsed path
     with open(args.pgn_path) as pgn:
         game = chess.pgn.read_game(pgn)
+
     # Parse moves to be printed with board
     global HALFMOVES_TO_BE_PRINTED
     for token in args.printBoard.split(' '):
@@ -127,13 +170,62 @@ def run(args):
         halfmove = int(token[:-1]) * 2
         halfmove -= 2 if token[-1] == 'w' else 1
         HALFMOVES_TO_BE_PRINTED.append(halfmove)
+
+    # Set style variables
+    global FONT_SIZE, FONT_NAME, SPACE_BEFORE, SPACE_AFTER, LINE_SPACING, PAGE_MARGIN, \
+        ALLOW_SPLITTING
+    FONT_SIZE = args.fontSize
+    FONT_NAME = args.fontName
+    SPACE_BEFORE = args.spaceBefore
+    SPACE_AFTER = args.spaceAfter
+    LINE_SPACING = args.lineSpacing
+    PAGE_MARGIN = args.pageMargin
+    ALLOW_SPLITTING = args.allowSplitting
+
     create_document(game)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Pretty print for pgn")
-    parser.add_argument('pgn_path', help='specify the path to the pgn')
-    parser.add_argument('-p', '--printBoard', help='Give a string of moves to be printed (e.g. "2w 3b 10w")', default='1w')
+    parser.add_argument('pgn_path',
+                        help='specify the path to the pgn')
+    parser.add_argument('-p',
+                        '--printBoard',
+                        help='Give a string of moves to be printed (e.g. "2w 3b 10w")',
+                        default='1w')
+    parser.add_argument('-fs',
+                        '--fontSize',
+                        type=int,
+                        help='Set the font size',
+                        default='10')
+    parser.add_argument('-fn',
+                        '--fontName',
+                        help='Set the font name',
+                        default='Helvetica')
+    parser.add_argument('-sb',
+                        '--spaceBefore',
+                        type=int,
+                        help='Set amount of space before every paragraph',
+                        default=6)
+    parser.add_argument('-sa',
+                        '--spaceAfter',
+                        type=int,
+                        help='Set amount of space after every paragraph',
+                        default=6)
+    parser.add_argument('-ls',
+                        '--lineSpacing',
+                        type=int,
+                        help='Set amount of space a single line takes',
+                        default=12)
+    parser.add_argument('-pm',
+                        '--pageMargin',
+                        type=float,
+                        help='Set margin (left, right, bottom, up) of page',
+                        default=1.27)
+    parser.add_argument('-s',
+                        '--allowSplitting',
+                        help='Use to have content split',
+                        action='store_true')
     parser.set_defaults(func=run)
     args = parser.parse_args()
     args.func(args)
@@ -141,35 +233,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-# def parse_PGN(pgn):
-#     meta_info, move_text = pgn.split('\n\n')
-#     meta_info = re.compile('\[.*\]').findall(meta_info)
-#     tags = {}
-#     for tag in meta_info:
-#         tags[re.compile('(?<=\[)\w*(?= )').search(tag)[0]] = re.compile('(?<= ").*(?="\])').search(tag)[0]
-#     moves_raw = re.compile('\d{1,3}\.').split(move_text.replace('\n', ' '))[1:]
-#     # every item in moves is a half move: 0 being white's first move and 1 being black's first move and so on
-#     moves = []
-#     # keys for the comments dictionary are integers of half-move
-#     comments = {}
-#     for i, move in enumerate(moves_raw):
-#         if '{' in move:
-#             # This regex pattern checks if comment is at end of string (with black's move)
-#             comment = re.compile('(?<=\{).*(?=\}$)').search(move.strip())
-#             if comment:
-#                 comments[i * 2 + 1] = comment.group()
-#             # if it's not at the end then the comment concerns white's move
-#             else:
-#                 comments[i * 2] = re.compile('(?<=\{).*(?=\})').search(move.strip()).group()
-#             # No remove the comment
-#             move = re.compile(' \{.*\}').sub('', move).strip()
-#         moves += move.strip().split(' ')
-#     return tags, moves, comments
-
-
-# Deprecated !!
-# def open_pgn(link):
-#     with open(link) as pgn:
-#         GAME = chess.pgn.read_game(pgn)
