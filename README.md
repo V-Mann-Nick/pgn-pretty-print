@@ -1,5 +1,5 @@
 # pgn-pretty-print
-generate good looking pdf documents from chess game (pgn)
+generate good looking pdf documents from chess game (pgn). There's and example pdf-file generated.
 
 Requirements:
 - reportlab
@@ -29,5 +29,4 @@ optional arguments:
                         Set amount of space a single line takes
   -pm PAGEMARGIN, --pageMargin PAGEMARGIN
                         Set margin (left, right, bottom, up) of page
-  -s, --allowSplitting  Use to have content split
 ```
