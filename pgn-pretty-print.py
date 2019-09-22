@@ -150,15 +150,15 @@ def create_document(game):
     # Generate paragraphs with move text and board diagramms
     paragraph = str()
     for i, move in enumerate(game.mainline()):
-        # After print of a board diagramm if it's black's move print move number
-        if any([i - 1 == halfmove for halfmove in HALFMOVES_TO_BE_PRINTED]) and i % 2 == 1:
-            paragraph += '<strong>{}...</strong> {} '.format(int((i + 2) / 2), print_move_and_variations(move, i).replace('<*>', '').strip())
-        else:
-            paragraph += print_move_and_variations(move, i).replace('<*>', '').strip() + ' '
         if move.comment and '<*>' in move.comment or any([i == halfmove for halfmove in HALFMOVES_TO_BE_PRINTED]):
             elements.append(Paragraph(paragraph, styles['Move_Text']))
             elements.append(KeepTogether(board_from_FEN(move.board().fen())))
             paragraph = str()
+        # After print of a board diagramm if it's black's move print move number
+        if any([i == halfmove for halfmove in HALFMOVES_TO_BE_PRINTED]) and i % 2 == 1:
+            paragraph += '<strong>{}...</strong> {} '.format(int((i + 2) / 2), print_move_and_variations(move, i).replace('<*>', '').strip())
+        else:
+            paragraph += print_move_and_variations(move, i).replace('<*>', '').strip() + ' '
     elements.append(Paragraph(paragraph, styles['Move_Text']))
 
     doc.build(elements)
