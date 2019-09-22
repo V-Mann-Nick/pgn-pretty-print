@@ -30,6 +30,7 @@ LINE_SPACING = None
 SPACE_BEFORE = None
 SPACE_AFTER = None
 LINE_SPACING = None
+COL_GAP = None
 # not yet implemented
 PAGE_FORMAT = A4
 PAGE_LAYOUT = None
@@ -71,6 +72,7 @@ def print_move_and_variations(move, halfmove):
     # examples: '1. e4', 'c5'
     move_number = int((halfmove + 2) / 2)
     white_to_move = halfmove % 2 is 0
+    # Force print of move number for a black move
     text = '<strong>{}{}</strong>{}'.format('{}. '.format(move_number) if white_to_move else '',
                                             move.san(),
                                             ' {}'.format(move.comment) if move.comment else '')
@@ -93,7 +95,7 @@ def print_move_and_variations(move, halfmove):
 
 def create_document(game):
     styles = getSampleStyleSheet()
-    doc = BaseDocTemplate('{} - {}.pdf'.format(game.headers['White'], game.headers['Black']),
+    doc = BaseDocTemplate('{} - {}.pdf'.format(game.headers.get('White'), game.headers.get('Black')),
                           pagesize=PAGE_FORMAT,
                           leftMargin=PAGE_MARGIN * cm,
                           rightMargin=PAGE_MARGIN * cm,
@@ -122,10 +124,9 @@ def create_document(game):
     ))
 
     # Two Columns
-    frame_gap = 1  # in cm
-    frame_width = doc.width / 2 - frame_gap / 2 * cm
+    frame_width = doc.width / 2 - COL_GAP / 2 * cm
     frame1 = Frame(doc.leftMargin, doc.bottomMargin, frame_width, doc.height, id='col1')
-    frame2 = Frame(doc.leftMargin + frame_width + frame_gap * cm, doc.bottomMargin, frame_width, doc.height, id='col2')
+    frame2 = Frame(doc.leftMargin + frame_width + COL_GAP * cm, doc.bottomMargin, frame_width, doc.height, id='col2')
     doc.addPageTemplates([PageTemplate(id='twoCol', frames=[frame1, frame2])])
 
     # Set board dimensions relative to the two column layout
@@ -136,18 +137,24 @@ def create_document(game):
     # elements will contain flowables for the build function
     elements = []
     # Paragraph for Heading and meta information
-    paragraph = '<font size={}><strong>{} - {}</strong></font><br/>'.format(
+    paragraph = '<font size={}><strong>{}<i>{}</i><br/> vs.<br/>{}<i>{}</i></strong></font><br/>'.format(
         FONT_SIZE + 2,
-        game.headers['White'],
-        game.headers['Black'])
+        game.headers.get('White'),
+        ' [{}]'.format(game.headers.get('WhiteElo')) if game.headers.get('WhiteElo') else '',
+        game.headers.get('Black'),
+        ' [{}]'.format(game.headers.get('BlackElo')) if game.headers.get('BlackElo') else '')
     for key in game.headers.keys():
-        if key != 'White' and key != 'Black' and game.headers[key] != '?':
-            paragraph += '<br/>{}: {}'.format(key, game.headers[key])
+        if key != 'White' and key != 'Black' and key != 'WhiteElo' and key != 'BlackElo' and game.headers.get(key) != '?':
+            paragraph += '<br/>{}: {}'.format(key, game.headers.get(key))
     elements.append(Paragraph(paragraph, styles['Header']))
     # Generate paragraphs with move text and board diagramms
     paragraph = str()
     for i, move in enumerate(game.mainline()):
-        paragraph += print_move_and_variations(move, i).replace('<*>', '').strip() + ' '
+        # After print of a board diagramm if it's black's move print move number
+        if any([i - 1 == halfmove for halfmove in HALFMOVES_TO_BE_PRINTED]) and i % 2 == 1:
+            paragraph += '<strong>{}...</strong> {} '.format(int((i + 2) / 2), print_move_and_variations(move, i).replace('<*>', '').strip())
+        else:
+            paragraph += print_move_and_variations(move, i).replace('<*>', '').strip() + ' '
         if move.comment and '<*>' in move.comment or any([i == halfmove for halfmove in HALFMOVES_TO_BE_PRINTED]):
             elements.append(Paragraph(paragraph, styles['Move_Text']))
             elements.append(KeepTogether(board_from_FEN(move.board().fen())))
@@ -173,13 +180,14 @@ def run(args):
 
     # Set style variables
     global FONT_SIZE, FONT_NAME, SPACE_BEFORE, SPACE_AFTER, LINE_SPACING, PAGE_MARGIN, \
-        ALLOW_SPLITTING
+        ALLOW_SPLITTING, COL_GAP
     FONT_SIZE = args.fontSize
     FONT_NAME = args.fontName
     SPACE_BEFORE = args.spaceBefore
     SPACE_AFTER = args.spaceAfter
     LINE_SPACING = args.lineSpacing
     PAGE_MARGIN = args.pageMargin
+    COL_GAP = args.columnGap
 
     create_document(game)
 
@@ -221,6 +229,11 @@ def main():
                         type=float,
                         help='Set margin (left, right, bottom, up) of page',
                         default=1.27)
+    parser.add_argument('-cg',
+                        '--columnGap',
+                        type=float,
+                        help='Set the width (in cm) between columns in two-column-layout',
+                        default=1)
     parser.set_defaults(func=run)
     args = parser.parse_args()
     args.func(args)
